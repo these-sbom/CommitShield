@@ -6,16 +6,29 @@ import re
 import shutil
 import tokenize
 import io
+import llm
+import argparse
+import sys
+import tree_sitter_cpp as tscpp
 from openai import OpenAI
 from urllib.parse import urlparse
 from datetime import datetime
 from collections import Counter
 from tree_sitter import Language, Parser
+from dotenv import load_dotenv
 
+load_dotenv()
 
-
-token = 'Your_Token'
+JOERN_CLI_PATH = os.environ['JOERN_CLI_PATH']
+GITHUB_TOKEN = os.environ['GITHUB_TOKEN']
+LLMS = {
+    'devstral-2512': llm.Devstral2512LLM(),
+    'deepseek-coder:6.7b': llm.DeepseekCoder6Dot7BLLM(),
+    'deepseek-coder-v2:16b': llm.DeepseekCoderV216BLLM(),
+    'deepseek-coder-v2:236b': llm.DeepseekCoderV2236BLLM()
+}
 clone_dir = 'repos/'
+
 def get_commit_link(repo_url):
     url = repo_url.replace("github.com", "api.github.com/repos").replace("commit", "commits")
     parsed_url = urlparse(url)
@@ -42,7 +55,7 @@ def get_commit_link(repo_url):
 
 def get_commit_information(repo_url, rep):
 
-    response = requests.get(repo_url, headers={'Authorization': f'token {token}'})
+    response = requests.get(repo_url, headers={'Authorization': f'token {GITHUB_TOKEN}'})
     if response.status_code == 200:
     
         commit_info = response.json()
@@ -123,7 +136,7 @@ def get_issues(message, rep):
         number = match_obj.group(1)  
         issue_url = 'https://api.github.com/' + 'repos/' + rep.OWNER + '/' + rep.REPO + '/' + 'issues/' + number
         headers = {
-            'Authorization': f'token {token}',
+            'Authorization': f'token {GITHUB_TOKEN}',
             'Accept': 'application/vnd.github.v3+json'
         }
         response = requests.get(issue_url, headers=headers)
@@ -143,7 +156,7 @@ def get_prs(message, rep):
         number = match_obj.group(1)  
         pr_url = 'https://api.github.com/' + 'repos/' + rep.OWNER + '/' + rep.REPO + '/' + 'pulls/' + number
         headers = {
-                'Authorization': f'token {token}',
+                'Authorization': f'token {GITHUB_TOKEN}',
                 'Accept': 'application/vnd.github.v3+json'
             }
         response = requests.get(pr_url, headers=headers)
@@ -161,7 +174,7 @@ def get_prs(message, rep):
 def get_comment(comment_url):
     url = comment_url
     headers = {
-            'Authorization': f'token {token}',
+            'Authorization': f'token {GITHUB_TOKEN}',
             'Accept': 'application/vnd.github.v3+json'
         }
     response = requests.get(url, headers=headers)
@@ -185,10 +198,6 @@ def LLM_describe(description):
     issue = description['issue']
     pr = description['pr']
     comments = description['comment']
-    client = OpenAI(
-        api_key="Your Key_Api",
-        base_url="https://api.deepseek.com",
-    )
     prompt = {
         "basic_description":basic,
         "issue_description":issue,
@@ -202,20 +211,14 @@ def LLM_describe(description):
 
     messages = [{"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}]
-    response = client.chat.completions.create(
-        model="deepseek-coder",
-        messages=messages,
-        max_tokens=1024,
-        temperature=0.7,
-        stream=False,
+    return LLM.get_chat_answer(
+        messages,
+        1024,
+        0.7,
+        False
     )
-    return response.choices[0].message.content
 
 def LLM_relevant(message, patch):
-    client = OpenAI(
-        api_key="Your Key_Api",
-        base_url="https://api.deepseek.com",
-    )
     prompt = {
         "description":message,
         "patch":patch
@@ -234,25 +237,14 @@ def LLM_relevant(message, patch):
     user_prompt = "I will provide you with the description information in a commit and the modifications made to one of the files in the patch of this commit. Please check if the modifications made to the file are related to the description information. The description is {description}. The patch is {patch}.".format(**prompt)
     messages = [{"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}]
-
-    response = client.chat.completions.create(
-        model="deepseek-coder",
-        messages=messages,
-        max_tokens=1024,
-        temperature=0.7,
-        stream=False,
-        response_format={
-            'type': 'json_object'
-        }
-    )
-    data_json = json.loads(response.choices[0].message.content)
-    return data_json['answer']
+    return LLM.get_chat_answer_in_json_format(
+        messages,
+        1024,
+        0.7,
+        False
+    )['answer']
 
 def LLM_step2(patch):
-    client = OpenAI(
-        api_key="Your Key_Api",
-        base_url="https://api.deepseek.com",
-    )
     prompt = {
         "patches":patch
     }
@@ -268,24 +260,14 @@ def LLM_step2(patch):
     messages = [{"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}]
 
-    response = client.chat.completions.create(
-        model="deepseek-coder",
-        messages=messages,
-        max_tokens=1024,
-        temperature=0.7,
-        stream=False,
-        response_format={
-            'type': 'json_object'
-        }
-    )
-    data_json = json.loads(response.choices[0].message.content)
-    return data_json['answer']
+    return LLM.get_chat_answer_in_json_format(
+        messages,
+        1024,
+        0.7,
+        False
+    )['answer']
 
 def LLM_impact(message, patch, func):
-    client = OpenAI(
-        api_key="Your Key_Api",
-        base_url="https://api.deepseek.com",
-    )
     system_prompt = """
     You are a code patch analysis expert, and the user will provide you with a commit patch and the function where the patch is located. If the function exists, it is the function where the patch is located. Please judge whether the impact of the modified statement by the patch is limited to this function based on the patch and its function. If it is, please output 1. If you think that the patch may have an impact on other functions that are not provided, please output 1; If no function is provided to you, i.e. the provided function is empty, please determine its impact range based on the patch content. If it is limited to within the function, output 1. If it may affect other functions, output 0. 
     Please output in JSON format. The content of the target JSON file is as follows:  
@@ -302,24 +284,14 @@ def LLM_impact(message, patch, func):
     """.format(description = message, patches = patch, functions = func)
     messages = [{"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}]
-    response = client.chat.completions.create(
-        model="deepseek-coder",
-        messages=messages,
-        max_tokens=1024,
-        temperature=0.7,
-        stream=False,
-        response_format={
-            'type': 'json_object'
-        }
+    return LLM.get_chat_answer_in_json_format(
+        messages,
+        1024,
+        0.7,
+        False
     )
-    data_json = json.loads(response.choices[0].message.content)
-    return data_json
 
 def LLM_analyze(description_pro, patch, patch_context):
-    client = OpenAI(
-        api_key="Your Key_Api",
-        base_url="https://api.deepseek.com",
-    )
     prompt = {
         "patches":patch,
         "context":patch_context
@@ -341,24 +313,14 @@ def LLM_analyze(description_pro, patch, patch_context):
     """.format(description = description_pro, patches = patch, contexts = patch_context)
     messages = [{"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}]
-    response = client.chat.completions.create(
-        model="deepseek-coder",
-        messages=messages,
-        max_tokens=1024,
-        temperature=0.7,
-        stream=False,
-        response_format={
-            'type': 'json_object'
-        }
+    return LLM.get_chat_answer_in_json_format(
+        messages,
+        1024,
+        0.7,
+        False
     )
-    data_json = response.choices[0].message.content
-    return data_json
 
 def LLM_analyze_without_joern(description_pro, patch, function):
-    client = OpenAI(
-        api_key="Your Key_Api",
-        base_url="https://api.deepseek.com",
-    )
     system_prompt = """
     You are the vulnerability repair and detection expert responsible for analyzing and submitting patches. You can determine whether this commit is a vulnerability fix commit based on the description information submitted and the modifications made in the patch submitted. The definition of vulnerability repair in commit is as follows: there are known security vulnerabilities or runtime errors in the code before patch modification, and the vulnerabilities or errors are resolved after modification in the patch. This vulnerability is a known vulnerability, and if the purpose of patch implementation is to upgrade functionality, secure defense, fix code format, or fix potential vulnerabilities (the code before modification has no known vulnerabilities), then this commit cannot be considered a vulnerability repair commit.    Please output in JSON format. The content of the target JSON file is as follows:
     {
@@ -376,18 +338,12 @@ def LLM_analyze_without_joern(description_pro, patch, function):
     """.format(description = description_pro, patches = patch, functions = function)
     messages = [{"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}]
-    response = client.chat.completions.create(
-        model="deepseek-coder",
-        messages=messages,
-        max_tokens=1024,
-        temperature=0.7,
-        stream=False,
-        response_format={
-           'type': 'json_object'
-        }
+    return LLM.get_chat_answer_in_json_format(
+        messages,
+        1024,
+        0.7,
+        False
     )
-    data_json = response.choices[0].message.content
-    return data_json
 
 def description_update(commit_infor, rep):
     description = {}
@@ -432,7 +388,7 @@ def get_download_url(url, parent_id):
 
 def file_download(url, save_path):
     headers = {
-        "Authorization": 'Your_Token' 
+        "Authorization": GITHUB_TOKEN 
     }
     try:
         
@@ -449,13 +405,13 @@ def file_download(url, save_path):
         print(f"Error: {e}")
 
 def get_func(file_path, line_number):
-    Language.build_library(
-        'build/my-languages.so',
-        [
-            'tree-sitter/vendor/tree-sitter-cpp'
-        ]
-    )
-    CPP_LANGUAGE = Language('build/my-languages.so', 'cpp')
+    # Language.build_library(
+    #     'build/my-languages.so',
+    #     [
+    #         'tree-sitter/vendor/tree-sitter-cpp'
+    #     ]
+    # )
+    CPP_LANGUAGE = Language(tscpp.language(), 'cpp')
     parser = Parser()
     parser.set_language(CPP_LANGUAGE)
     
@@ -657,7 +613,7 @@ import overflowdb.traversal._
 import java.io.File
 import java.io.PrintWriter
 
-importCode(inputPath="path/{repo}", projectName="{repo}")
+importCode(inputPath="repos/{repo}", projectName="{repo}")
    
 val calls = cpg.call("{func}")
 val file_call = calls.method.file.toJsonPretty
@@ -674,7 +630,7 @@ writer1.close()
 """.format(func=function, repo = rep)
     with open(query_path, 'w') as file:
         file.write(text)
-    joern_cli_path = "your_path"
+    joern_cli_path = JOERN_CLI_PATH
     cpg_file_path = "your_path/{repo}/cpg.bin".format(repo = rep)
     joern_script_path = query_path
     success = joern_analyze_code( joern_cli_path, cpg_file_path, joern_script_path)
@@ -704,13 +660,13 @@ def patch_context(f_file, f_line, function, repo):
     context = []
     for count in range(len(calls['call'])):
         path = 'repos/' + repo + '/' + calls['call'][count]['file']
-        Language.build_library(
-            'build/my-languages.so',
-            [
-                'tree-sitter/vendor/tree-sitter-cpp'
-            ]
-        )
-        CPP_LANGUAGE = Language('build/my-languages.so', 'cpp')
+        # Language.build_library(
+        #     'build/my-languages.so',
+        #     [
+        #         'tree-sitter/vendor/tree-sitter-cpp'
+        #     ]
+        # )
+        CPP_LANGUAGE = Language(tscpp.language(), 'cpp')
         parser = Parser()
         parser.set_language(CPP_LANGUAGE)
         extension = path.split('.')[-1]
@@ -976,6 +932,17 @@ def get_folder_size(folder_path):
                     total_size += os.path.getsize(fp)
     return total_size
 
+parser = argparse.ArgumentParser(description='Launch CommitShield\'s VFD')
+parser.add_argument('--llm', type=str, help='select the large language model to use', metavar='<LLM>')
+args = parser.parse_args()
+llm_name = args.llm
+
+if not llm_name:
+    sys.exit('Missing LLM argument\nuSAGE: python vul_fix_check.py -llm <LLM>')
+if llm_name not in LLMS:
+    sys.exit(f'The LLM \'{llm_name}\' does not exist')
+
+LLM = LLMS[llm_name]
 
 url_list = []
 lines = 0
