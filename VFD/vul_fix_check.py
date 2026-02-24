@@ -1,4 +1,3 @@
-import requests
 import json
 import os
 import subprocess
@@ -10,23 +9,22 @@ import llm
 import argparse
 import sys
 import tree_sitter_cpp as tscpp
-from openai import OpenAI
 from urllib.parse import urlparse
 from datetime import datetime
 from collections import Counter
 from tree_sitter import Language, Parser
 from dotenv import load_dotenv
+from git_data_retriever import RemoteGit
 
 load_dotenv()
 
-JOERN_CLI_PATH = os.environ['JOERN_CLI_PATH']
-GITHUB_TOKEN = os.environ['GITHUB_TOKEN']
 LLMS = {
     'devstral-2512': llm.Devstral2512LLM(),
     'deepseek-coder:6.7b': llm.DeepseekCoder6Dot7BLLM(),
     'deepseek-coder-v2:16b': llm.DeepseekCoderV216BLLM(),
     'deepseek-coder-v2:236b': llm.DeepseekCoderV2236BLLM()
 }
+GIT = RemoteGit()
 clone_dir = 'repos/'
 
 def get_commit_link(repo_url):
@@ -51,27 +49,6 @@ def get_commit_link(repo_url):
     rep = Rep(OWNER, REPO, commit_id)
     
     return url, rep
-
-
-def get_commit_information(repo_url, rep):
-
-    response = requests.get(repo_url, headers={'Authorization': f'token {GITHUB_TOKEN}'})
-    if response.status_code == 200:
-    
-        commit_info = response.json()
-        commit = {}
-        commit['sha'] = commit_info['sha']
-        commit['message'] = commit_info['commit']['message']
-        commit['url'] = commit_info['url']
-        commit['status'] = commit_info['stats']
-        commit['files'] = commit_info['files']
-        commit['parents_commit'] = commit_info['parents'][0]['url']
-        commit['parents_sha'] = commit_info['parents'][0]['sha']
-        commit['comments_url'] = commit_info['comments_url']
-        return commit
-    else:
-        print("Failed to get commit information:", response.status_code)
-        return 0
     
 def patch_classify(commit_infor):
     file_numbers = len(commit_infor['files'])
@@ -128,70 +105,6 @@ def patch_classify(commit_infor):
             new_patches = commit_infor['files']
             print("Error!!! NO PATCHES!")
             return classify_flag, new_patches
-    
-
-def get_issues(message, rep):
-    match_obj = re.search(r'#(\d+)', message)
-    if match_obj:
-        number = match_obj.group(1)  
-        issue_url = 'https://api.github.com/' + 'repos/' + rep.OWNER + '/' + rep.REPO + '/' + 'issues/' + number
-        headers = {
-            'Authorization': f'token {GITHUB_TOKEN}',
-            'Accept': 'application/vnd.github.v3+json'
-        }
-        response = requests.get(issue_url, headers=headers)
-        if response.status_code == 200:
-            issue_data = response.json()
-            issue_description = issue_data.get('title', 'No description provided.')
-            print("GET ISSUE!!!")
-            return issue_description
-        else:
-            print(f'Failed to fetch issue: {response.status_code}')
-            issue_description = 'NULL'
-            return issue_description
-
-def get_prs(message, rep):
-    match_obj = re.search(r'#(\d+)', message)
-    if match_obj:
-        number = match_obj.group(1)  
-        pr_url = 'https://api.github.com/' + 'repos/' + rep.OWNER + '/' + rep.REPO + '/' + 'pulls/' + number
-        headers = {
-                'Authorization': f'token {GITHUB_TOKEN}',
-                'Accept': 'application/vnd.github.v3+json'
-            }
-        response = requests.get(pr_url, headers=headers)
-        if response.status_code == 200:
-                pr_data = response.json()
-                pull_description =pr_data.get('body', 'No description provided.')
-                print("GET PULL REQUEST!!!")
-                return pull_description
-        else:
-            print(f'Failed to fetch pr: {response.status_code}')
-            pr_description = 'NULL'
-            return pr_description
-
-
-def get_comment(comment_url):
-    url = comment_url
-    headers = {
-            'Authorization': f'token {GITHUB_TOKEN}',
-            'Accept': 'application/vnd.github.v3+json'
-        }
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        comment_data = response.json()
-        if comment_data == '':
-            comment_description = 'NULL'
-            return comment_description
-        else:
-            comment_description = []
-            for i in range(len(comment_data)):
-                comment_description.append(comment_data[i]['body'])
-            return comment_description
-    else:
-        print(f'Failed to fetch issue: {response.status_code}')
-        comment_description = 'NULL'
-        return comment_description
 
 def LLM_describe(description):
     basic = description['basic']
@@ -213,7 +126,6 @@ def LLM_describe(description):
                 {"role": "user", "content": user_prompt}]
     return LLM.get_chat_answer(
         messages,
-        1024,
         0.7,
         False
     )
@@ -239,7 +151,6 @@ def LLM_relevant(message, patch):
                 {"role": "user", "content": user_prompt}]
     return LLM.get_chat_answer_in_json_format(
         messages,
-        1024,
         0.7,
         False
     )['answer']
@@ -262,7 +173,6 @@ def LLM_step2(patch):
 
     return LLM.get_chat_answer_in_json_format(
         messages,
-        1024,
         0.7,
         False
     )['answer']
@@ -286,7 +196,6 @@ def LLM_impact(message, patch, func):
                 {"role": "user", "content": user_prompt}]
     return LLM.get_chat_answer_in_json_format(
         messages,
-        1024,
         0.7,
         False
     )
@@ -315,7 +224,6 @@ def LLM_analyze(description_pro, patch, patch_context):
                 {"role": "user", "content": user_prompt}]
     return LLM.get_chat_answer_in_json_format(
         messages,
-        1024,
         0.7,
         False
     )
@@ -340,7 +248,6 @@ def LLM_analyze_without_joern(description_pro, patch, function):
                 {"role": "user", "content": user_prompt}]
     return LLM.get_chat_answer_in_json_format(
         messages,
-        1024,
         0.7,
         False
     )
@@ -348,12 +255,12 @@ def LLM_analyze_without_joern(description_pro, patch, function):
 def description_update(commit_infor, rep):
     description = {}
     description['basic'] = commit_infor['message']
-    issue_descrption = get_issues(description['basic'], rep)
+    issue_descrption = GIT.get_issues(description['basic'], rep)
     description['issue'] = issue_descrption
-    pr_descrption = get_prs(description['basic'], rep)
+    pr_descrption = GIT.get_prs(description['basic'], rep)
     description['pr'] = pr_descrption
     comment_url = commit_infor['comments_url']
-    comment_descrption = get_comment(comment_url)
+    comment_descrption = GIT.get_comment(comment_url)
     description['comment'] = comment_descrption
     description_pro = LLM_describe(description)
     return description_pro
@@ -385,24 +292,6 @@ def get_download_url(url, parent_id):
     son_id = parts[6]
     download_url = url.replace(son_id, parent_id)
     return download_url
-
-def file_download(url, save_path):
-    headers = {
-        "Authorization": GITHUB_TOKEN 
-    }
-    try:
-        
-        response = requests.get(url, headers=headers)
-
-        
-        if response.status_code == 200:
-            
-            with open(save_path, 'wb') as file:
-                file.write(response.content)
-        else:
-            print(f"Failed: {response.status_code}")
-    except Exception as e:
-        print(f"Error: {e}")
 
 def get_func(file_path, line_number):
     # Language.build_library(
@@ -630,7 +519,7 @@ writer1.close()
 """.format(func=function, repo = rep)
     with open(query_path, 'w') as file:
         file.write(text)
-    joern_cli_path = JOERN_CLI_PATH
+    joern_cli_path = 'joern'
     cpg_file_path = "your_path/{repo}/cpg.bin".format(repo = rep)
     joern_script_path = query_path
     success = joern_analyze_code( joern_cli_path, cpg_file_path, joern_script_path)
@@ -708,7 +597,7 @@ def count_tokens(source_code):
 
 def all_process(repo_url):
     api_url, rep = get_commit_link(repo_url)
-    commit = get_commit_information(api_url, rep)
+    commit = GIT.get_commit_information(api_url, rep)
     description_pro = description_update(commit, rep)
     if len(commit['files']) > 1:
         flag = 2
@@ -742,7 +631,7 @@ def all_process(repo_url):
             extension = filename.split('.')[-1]
             c_extensions = ['c', 'cpp', 'cc', 'h', 'cxx', 'c++', 'hh']
             if extension in c_extensions:
-                file_download(new_url, save_path)
+                GIT.file_download(new_url, save_path)
                 if 'patch' in commit['files'][i]:
                     lines = get_line(commit['files'][i]['patch'])
                     patch_infor['filename'] = commit['files'][i]['filename']
@@ -938,7 +827,7 @@ args = parser.parse_args()
 llm_name = args.llm
 
 if not llm_name:
-    sys.exit('Missing LLM argument\nuSAGE: python vul_fix_check.py -llm <LLM>')
+    sys.exit('Missing LLM argument\nusage: python vul_fix_check.py -llm <LLM>')
 if llm_name not in LLMS:
     sys.exit(f'The LLM \'{llm_name}\' does not exist')
 
