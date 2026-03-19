@@ -12,13 +12,13 @@
 - Build the image of the project from the Dockerfile:
 
 ```
-docker build -t commitshield .
+docker build --network=host --platform linux/amd64 -t commitshield .
 ```
 
 - Create and run the container:
 
 ```
-docker run --name commitshield -it commitshield bash
+docker run --network=host --name commitshield -it commitshield bash
 ```
 
 - Once in the container, go to the `VFD` folder:
