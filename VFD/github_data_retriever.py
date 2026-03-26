@@ -38,14 +38,14 @@ class RemoteGitHub(GitHub):
     def check_github_primary_rate_limit(self):
         if self.__number_of_requests_remaining_for_primary_rate_limit == 0:
             now = datetime.now(timezone.utc)
-            time_to_wait = __time_at_which_primary_rate_limit_resets - now
+            time_to_wait = self.__time_at_which_primary_rate_limit_resets - now
             print('Wait (GitHub API primary rate limit) :', time_to_wait.seconds)
             time.sleep(time_to_wait.seconds)
 
     def set_github_primary_rate_limit(self, response_headers):
         self.__number_of_requests_remaining_for_primary_rate_limit = float(response_headers['x-ratelimit-remaining']) if ('x-ratelimit-remaining' in response_headers) else self.__number_of_requests_remaining_for_primary_rate_limit - 1
         if ('x-ratelimit-reset' in response_headers):
-            __time_at_which_primary_rate_limit_resets = float(response_headers['x-ratelimit-reset'])
+            self.__time_at_which_primary_rate_limit_resets = float(response_headers['x-ratelimit-reset'])
     
     def get_github_information_handling_primary_rate_limit(self, api_url, request_headers):
         self.check_github_primary_rate_limit()

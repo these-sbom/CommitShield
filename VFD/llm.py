@@ -2,6 +2,7 @@ import os
 import json
 import time
 import requests
+from openai import OpenAI
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from abc import ABC, abstractmethod
