@@ -10,7 +10,7 @@ load_dotenv()
 
 GITHUB_TOKEN = os.environ['GITHUB_TOKEN']
 
-class Git(ABC):
+class GitHub(ABC):
     @abstractmethod
     def get_commit_information(repo_url, rep):
         pass
@@ -31,7 +31,7 @@ class Git(ABC):
     def file_download(url, save_path):
         pass
 
-class RemoteGit(Git):
+class RemoteGitHub(GitHub):
     __number_of_requests_remaining_for_primary_rate_limit = 5000
     __time_at_which_primary_rate_limit_resets = 0
 

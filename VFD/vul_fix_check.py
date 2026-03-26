@@ -14,7 +14,7 @@ from datetime import datetime
 from collections import Counter
 from tree_sitter import Language, Parser
 from dotenv import load_dotenv
-from git_data_retriever import RemoteGit
+from github_data_retriever import RemoteGitHub
 
 load_dotenv()
 
@@ -24,7 +24,7 @@ LLMS = {
     'deepseek-coder-v2:16b': llm.DeepseekCoderV216BLLM(),
     'deepseek-coder-v2:236b': llm.DeepseekCoderV2236BLLM()
 }
-GIT = RemoteGit()
+GITHUB = RemoteGitHub()
 clone_dir = 'repos/'
 
 def get_commit_link(repo_url):
@@ -255,12 +255,12 @@ def LLM_analyze_without_joern(description_pro, patch, function):
 def description_update(commit_infor, rep):
     description = {}
     description['basic'] = commit_infor['message']
-    issue_descrption = GIT.get_issues(description['basic'], rep)
+    issue_descrption = GITHUB.get_issues(description['basic'], rep)
     description['issue'] = issue_descrption
-    pr_descrption = GIT.get_prs(description['basic'], rep)
+    pr_descrption = GITHUB.get_prs(description['basic'], rep)
     description['pr'] = pr_descrption
     comment_url = commit_infor['comments_url']
-    comment_descrption = GIT.get_comment(comment_url)
+    comment_descrption = GITHUB.get_comment(comment_url)
     description['comment'] = comment_descrption
     description_pro = LLM_describe(description)
     return description_pro
@@ -597,7 +597,7 @@ def count_tokens(source_code):
 
 def all_process(repo_url):
     api_url, rep = get_commit_link(repo_url)
-    commit = GIT.get_commit_information(api_url, rep)
+    commit = GITHUB.get_commit_information(api_url, rep)
     description_pro = description_update(commit, rep)
     if len(commit['files']) > 1:
         flag = 2
@@ -631,7 +631,7 @@ def all_process(repo_url):
             extension = filename.split('.')[-1]
             c_extensions = ['c', 'cpp', 'cc', 'h', 'cxx', 'c++', 'hh']
             if extension in c_extensions:
-                GIT.file_download(new_url, save_path)
+                GITHUB.file_download(new_url, save_path)
                 if 'patch' in commit['files'][i]:
                     lines = get_line(commit['files'][i]['patch'])
                     patch_infor['filename'] = commit['files'][i]['filename']
