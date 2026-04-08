@@ -149,11 +149,17 @@ def LLM_relevant(message, patch):
     user_prompt = "I will provide you with the description information in a commit and the modifications made to one of the files in the patch of this commit. Please check if the modifications made to the file are related to the description information. The description is {description}. The patch is {patch}.".format(**prompt)
     messages = [{"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}]
-    return LLM.get_chat_answer_in_json_format(
+    return get_response_answer(LLM.get_chat_answer_in_json_format(
         messages,
         0.7,
         False
-    )['answer']
+    ))
+
+def get_response_answer(response):
+    return response['answer'] if 'answer' in response else response
+
+def get_response(response):
+    return response if 'answer' in response else { 'answer': response }
 
 def LLM_step2(patch):
     prompt = {
@@ -171,11 +177,11 @@ def LLM_step2(patch):
     messages = [{"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}]
 
-    return LLM.get_chat_answer_in_json_format(
+    return get_response_answer(LLM.get_chat_answer_in_json_format(
         messages,
         0.7,
         False
-    )['answer']
+    ))
 
 def LLM_impact(message, patch, func):
     system_prompt = """
@@ -194,11 +200,11 @@ def LLM_impact(message, patch, func):
     """.format(description = message, patches = patch, functions = func)
     messages = [{"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}]
-    return LLM.get_chat_answer_in_json_format(
+    return get_response(LLM.get_chat_answer_in_json_format(
         messages,
         0.7,
         False
-    )
+    ))
 
 def LLM_analyze(description_pro, patch, patch_context):
     prompt = {
