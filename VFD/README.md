@@ -9,7 +9,7 @@
     - `OPENAI_API_KEY`: your OpenAI API key
     - `MISTRAL_API_KEY`: your MistralAI API key
 
-- Build the image of the project from the Dockerfile:
+- Build the image of the project from the Dockerfile (at the root of the project):
 
 ```
 docker build --network=host --platform linux/amd64 -t commitshield .
@@ -27,7 +27,7 @@ docker run --network=host --name commitshield -it commitshield bash
 cd VFD
 ```
 
-- _Mandatory_: Set the value of the `checkpoint.txt` file to 0 to analyze commits from the first one in the list
+- _Facultative_: Set the value of the `checkpoint.txt` file to 0 to analyze commits from the first one in the list
 
 - To launch the vulnerability fix detection, either:
   - run a shell script:
