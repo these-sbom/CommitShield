@@ -436,8 +436,15 @@ def get_repo(url):
     repo_field = parts[1]
     return repo_field
 
-def repo_download(url_git, repo, sha):
-    download_path = clone_dir + repo
+def get_repository_owner(url):
+    parsed_url = urlparse(url)
+    repo_path = parsed_url.path.lstrip('/')
+    parts = repo_path.split('/')
+    repository_owner = parts[0]
+    return repository_owner
+
+def repo_download(url_git, repo,             repository_owner, sha):
+    download_path = clone_dir + os.path.join(repository_owner, repo)
     if not os.path.exists(download_path):
         cmd = ['git', 'clone', url_git, download_path]
         result = subprocess.run(cmd, check=True)
@@ -477,8 +484,9 @@ def delete_folder_if_smaller_than_1gb(folder_path):
 def repo_size(url):
     parsed_url = urlparse(url)
     path_parts = parsed_url.path.strip("/").split("/")
+    repository_owner_name = path_parts[0]
     repo_name = path_parts[1]
-    path = 'repos/' + repo_name
+    path = 'repos/' + os.path.join(repository_owner_name, repo_name)
     if os.path.exists(path):
         delete_folder_if_smaller_than_1gb(path)
 
@@ -501,14 +509,14 @@ def joern_analyze_code(joern_cli_path, cpg_file_path, joern_script_path):
         return 0
 
 
-def call_analyze(query_path, function, rep):
+def call_analyze(query_path, function, rep, repository_owner):
     text = """
 import io.shiftleft.codepropertygraph.generated._
 import overflowdb.traversal._
 import java.io.File
 import java.io.PrintWriter
 
-importCode(inputPath="repos/{repo}", projectName="{repo}")
+importCode(inputPath="repos/{repo_path}", projectName="{repo}")
    
 val calls = cpg.call("{func}")
 val file_call = calls.method.file.toJsonPretty
@@ -522,7 +530,7 @@ writer.close()
 val writer1 = new PrintWriter(new File(outputPathfunc))
 writer1.write(callersJson)
 writer1.close()
-""".format(func=function, repo = rep)
+""".format(func=function, repo_path = f'{repository_owner}/{rep}', repo = f'{repository_owner}_{rep}')
     with open(query_path, 'w') as file:
         file.write(text)
     joern_cli_path = 'joern'
@@ -532,7 +540,7 @@ writer1.close()
     return success
 
 
-def patch_context(f_file, f_line, function, repo):
+def patch_context(f_file, f_line, function, repo, repository_owner):
     with open (f_file, 'r')as f1:
         file_data = json.load(f1)
         files = []
@@ -554,7 +562,7 @@ def patch_context(f_file, f_line, function, repo):
         calls['call'].append(calls['call'][count])
     context = []
     for count in range(len(calls['call'])):
-        path = 'repos/' + repo + '/' + calls['call'][count]['file']
+        path = 'repos/' + os.path.join(repository_owner, repo) + '/' + calls['call'][count]['file']
         # Language.build_library(
         #     'build/my-languages.so',
         #     [
@@ -709,8 +717,9 @@ def all_process(repo_url):
         if flag_impact == 0:
             git_url = url_change(repo_url)
             repo = get_repo(repo_url)
+            repository_owner = get_repository_owner(repo_url)
             context_tokens = 0
-            size = repo_download(git_url, repo, commit['parents_sha'])
+            size = repo_download(git_url, repo, repository_owner, commit['parents_sha'])
             if size == 1:
                 query_path = "calls_query.sc" 
                 context = {}
@@ -723,11 +732,11 @@ def all_process(repo_url):
                     name = function_name[i]
                     if name != 'NULL':
                         
-                        success = call_analyze(query_path, name, rep.REPO)
+                        success = call_analyze(query_path, name, rep.REPO, rep.OWNER)
                         if success == 1:
                             f_file = 'path'+ name + '_file_output.json'
                             f_line = 'path'+ name + '_func_output.json'
-                            context[name] = patch_context(f_file, f_line, name, rep.REPO)
+                            context[name] = patch_context(f_file, f_line, name, rep.REPO, rep.OWNER)
 
                         elif success == 0:
                             context[name] = 'NULL'
@@ -763,8 +772,9 @@ def all_process(repo_url):
     elif len(impact_answer) == 0:
         git_url = url_change(repo_url)
         repo = get_repo(repo_url)
-        repo_download(git_url, repo, commit['parents_sha'])
-        size = repo_download(git_url, repo, commit['parents_sha'])
+        repository_owner = get_repository_owner(repo_url)
+        repo_download(git_url, repo, repository_owner, commit['parents_sha'])
+        size = repo_download(git_url, repo, repository_owner, commit['parents_sha'])
         context_tokens = 0
         if size == 1:
             query_path = "calls_query.sc" 
@@ -782,11 +792,11 @@ def all_process(repo_url):
             for i in range(len(function_name_new)):
                 name = function_name_new[i]
                 if name != 'NULL':
-                    success = call_analyze(query_path, name, rep.REPO)
+                    success = call_analyze(query_path, name, rep.REPO, rep.OWNER)
                     if success == 1:
                         f_file = 'path'+ name + '_file_output.json'
                         f_line = 'path'+ name + '_func_output.json'
-                        context[name] = patch_context(f_file, f_line, name, rep.REPO)
+                        context[name] = patch_context(f_file, f_line, name, rep.REPO, rep.OWNER)
                         context_tokens = context_tokens + 0.3 * len(context[name])
                     elif success == 0:
                         context[name] = 'NULL'
