@@ -1,3 +1,7 @@
+'''
+Copyright (c) 2025 André Storhaug
+'''
+
 import json
 import os
 import subprocess
@@ -8,13 +12,12 @@ import io
 import llm
 import argparse
 import sys
-import tree_sitter_cpp as tscpp
 from urllib.parse import urlparse
 from datetime import datetime
 from collections import Counter
-from tree_sitter import Language, Parser
 from dotenv import load_dotenv
 from github_data_retriever import RemoteGitHub
+from language_handler import get_func, EXT_TO_LANG
 
 load_dotenv()
 
@@ -299,85 +302,6 @@ def get_download_url(url, parent_id):
     download_url = url.replace(son_id, parent_id)
     return download_url
 
-def get_func(file_path, line_number):
-    # Language.build_library(
-    #     'build/my-languages.so',
-    #     [
-    #         'tree-sitter/vendor/tree-sitter-cpp'
-    #     ]
-    # )
-    CPP_LANGUAGE = Language(tscpp.language(), 'cpp')
-    parser = Parser()
-    parser.set_language(CPP_LANGUAGE)
-    
-    with open(file_path, 'r', errors='ignore') as file:
-        lines = file.read()
-    code = lines
-    tree = parser.parse(bytes(code,"utf-8"))
-    root_node = tree.root_node
-    code = code.split("\n")
-    
-    for child_node in root_node.children:
-        if child_node.type == "function_definition":
-            function_start_line = child_node.start_point[0]
-            function_end_line = child_node.end_point[0]
-            if function_start_line != function_end_line:
-                function_code = code[function_start_line:function_end_line + 1]
-                
-                function_code = "\n".join(function_code)
-                if (function_start_line < line_number < function_end_line + 1):
-                    print("Find!!!!", function_start_line, function_end_line + 1)
-                    function_name_line = code[function_start_line]
-                    if "(" in function_name_line:
-                        match = re.search(r'\s+([^\s()]+)\(', function_name_line)
-                        match_2 = re.search(r'([^\s]+)\(', function_name_line)
-                        match_3 = re.search(r'\s+(?:\*\s*)?([^\s()]+)\(', function_name_line) 
-                        if match:   
-                            function_name = match.group(1)
-                        elif match_2:
-                            function_name = match_2.group(1)
-                        else:
-                            function_name = 'NULL'
-
-                        if match_3:
-                            function_name = match_3.group(1)
-                        
-                        return function_code,function_name
-                    else:
-                        function_name_line = code[function_start_line + 1]
-                        match = re.search(r'\s+([^\s()]+)\(', function_name_line)
-                        match_2 = re.search(r'([^\s]+)\(', function_name_line)
-                        match_3 = re.search(r'\s+(?:\*\s*)?([^\s()]+)\(', function_name_line) 
-                        if match:   
-                            function_name = match.group(1)
-                        elif match_2:
-                            function_name = match_2.group(1)
-                        
-                        else:
-                            function_name = 'NULL'
-                        if match_3:
-                            function_name = match_3.group(1)
-                            
-                        return function_code,function_name
-
-            else:
-                function_code = code[function_start_line]
-                function_name = 'NULL'
-                return function_code,function_name
-            
-        elif child_node.type != "function_definition":
-            for child in child_node.children:
-                function_code, function_name = find_function_define(child, code, line_number)
-                if function_name != 'NULL' and function_code != 'NULL':
-                    return function_code,function_name
-            function_code = 'NULL'
-            function_name = 'NULL' 
-            
-    function_code = 'NULL'
-    function_name = 'NULL'
-    return function_code,function_name    
-
-
 def find_function_define(root_node, code, line_number):
     if root_node.type != "function_definition":
         for child in root_node.children:
@@ -540,66 +464,28 @@ writer1.close()
     return success
 
 
-def patch_context(f_file, f_line, function, repo, repository_owner):
-    with open (f_file, 'r')as f1:
-        file_data = json.load(f1)
-        files = []
-        for file in file_data:
-            files.append(file['name'])
+def patch_context(f_file, f_line, function, repo, repository_owner, before=3, after=10):
+    with open(f_file, 'r') as f1:
+        files = [file['name'] for file in json.load(f1)]
+    with open(f_line, 'r') as f2:
+        lines = [line['lineNumber'] for line in json.load(f2)]
 
-    with open (f_line, 'r')as f2:
-        file_line = json.load(f2)
-        lines = []
-        for line in file_line:
-            lines.append(line['lineNumber'])
-    calls = {}
-    calls['func'] = function
-    calls['call'] = [{}] * len(files)
-    for count in range(len(files)):
-        calls['call'][count] = {}
-        calls['call'][count]['file'] = files[count]
-        calls['call'][count]['line'] = lines[count]
-        calls['call'].append(calls['call'][count])
     context = []
-    for count in range(len(calls['call'])):
-        path = 'repos/' + os.path.join(repository_owner, repo) + '/' + calls['call'][count]['file']
-        # Language.build_library(
-        #     'build/my-languages.so',
-        #     [
-        #         'tree-sitter/vendor/tree-sitter-cpp'
-        #     ]
-        # )
-        CPP_LANGUAGE = Language(tscpp.language(), 'cpp')
-        parser = Parser()
-        parser.set_language(CPP_LANGUAGE)
-        extension = path.split('.')[-1]
-        c_extensions = ['c', 'cpp', 'cc', 'h', 'cxx', 'c++', 'hh']
-        if extension in c_extensions:
-            with open(path, 'r', errors='ignore') as file:
-                lines = file.read()
-            code = lines
-            tree = parser.parse(bytes(code,"utf-8"))
-            root_node = tree.root_node
-            code = code.split("\n")
-            for child_node in root_node.children:
-                if child_node.type == "function_definition":
-                    function_start_line = child_node.start_point[0]
-                    function_end_line = child_node.end_point[0]
-                
-                    if function_start_line != function_end_line:
-                        function_code = code[function_start_line:function_end_line + 1]
-                        
-                        function_code = "\n".join(function_code)
-                        if (function_start_line < calls['call'][count]['line'] < function_end_line + 1):
-                            print("Find!!!!", function_start_line, function_end_line + 1)
-                            code_new = code[calls['call'][count]['line'] - 3:calls['call'][count]['line'] + 10]
-                            code_new = "\n".join(code_new)
-                            context.append(code_new)
-                    else:
-                        function_code = code[function_start_line]
 
+    for file_path, line_number in zip(files, lines):
+        full_path = file_path
+        func_code, func_name = get_func(full_path, line_number)
+        if func_code != "NULL":
+            code_lines = func_code.split("\n")
+            # Determine snippet around the target line
+            local_line = line_number - func_code.split("\n")[0].count("\n") - 1
+            start = max(local_line - before, 0)
+            end = min(local_line + after, len(code_lines))
+            snippet = "\n".join(code_lines[start:end])
+            context.append(snippet)
         else:
             context.append(None)
+
     return context
 
 
@@ -643,8 +529,8 @@ def all_process(repo_url):
                 os.makedirs(directory_path)
             save_path = 'result/'+ rep.REPO + '/' + filename
             extension = filename.split('.')[-1]
-            c_extensions = ['c', 'cpp', 'cc', 'h', 'cxx', 'c++', 'hh']
-            if extension in c_extensions:
+            #c_extensions = ['c', 'cpp', 'cc', 'h', 'cxx', 'c++', 'hh']
+            if extension in EXT_TO_LANG.keys():
                 GITHUB.file_download(new_url, save_path)
                 if 'patch' in commit['files'][i]:
                     lines = get_line(commit['files'][i]['patch'])

@@ -1,4 +1,6 @@
-# Run CommitShield VFD
+# CommitShield VFD
+
+## Run
 
 - Obtain a [GitHub API authentication token](https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api?apiVersion=2022-11-28)
 
@@ -41,3 +43,10 @@ cd VFD
   ```bash
   python vul_fix_check.py --llm <llm>
   ```
+
+## Development
+
+To adapt the VFD to other languages, code from these files of the [`andstor/agentic-security-patch-classification-replication-package`](https://github.com/andstor/agentic-security-patch-classification-replication-package/tree/10f5f54e6bada0f37d81c7ec5fbe5e4fb154edbf) repository was used:
+
+- [`baselines/CommitShield/vul_fix_check.py`](https://github.com/andstor/agentic-security-patch-classification-replication-package/blob/10f5f54e6bada0f37d81c7ec5fbe5e4fb154edbf/baselines/CommitShield/vul_fix_check.py)
+- [`baselines/CommitShield/utils.py`](https://github.com/andstor/agentic-security-patch-classification-replication-package/blob/10f5f54e6bada0f37d81c7ec5fbe5e4fb154edbf/baselines/CommitShield/utils.py)
