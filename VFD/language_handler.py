@@ -9,7 +9,6 @@ import tree_sitter_java as tsjava
 import tree_sitter_php as tsphp
 import tree_sitter_python as tspy
 import tree_sitter_javascript as tsjs
-import tree_sitter_go as tsgo
 
 LANGUAGES = {
     "c": Language(tscpp.language(), 'cpp'),
@@ -17,8 +16,7 @@ LANGUAGES = {
     "python": Language(tspy.language(), 'python'),
     "php": Language(tsphp.language_php(), 'php'),
     "java": Language(tsjava.language(), 'java'),
-    "javascript": Language(tsjs.language(), 'javascript'),
-    "go": Language(tsgo.language(), 'go')
+    "javascript": Language(tsjs.language(), 'javascript')
 }
 
 # Per-language function declaration rules
@@ -46,11 +44,7 @@ FUNC_RULES = {
     "javascript": {
         "nodes": ["function_declaration"],
         "identifier": ["identifier"],
-    },
-    "go": {
-        "nodes": ["function_declaration"],
-        "identifier": ["identifier"],
-    },
+    }
 }
 
 # Map extensions without dot to language keys
@@ -65,8 +59,7 @@ EXT_TO_LANG = {
     "py": "python",
     "php": "php",
     "java": "java",
-    "js": "javascript",
-    "go": "go"
+    "js": "javascript"
 }
 
 def detect_language(file_path):
