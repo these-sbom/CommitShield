@@ -437,7 +437,7 @@ def joern_analyze_code(joern_cli_path, cpg_file_path, joern_script_path):
 def call_analyze(query_path, function, rep, repository_owner):
     text = """
 import io.shiftleft.codepropertygraph.generated._
-import overflowdb.traversal._
+import io.shiftleft.semanticcpg.language._
 import java.io.File
 import java.io.PrintWriter
 
