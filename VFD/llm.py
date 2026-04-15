@@ -108,6 +108,11 @@ class DeepseekCoder6Dot7BLLM(OllamaLLM):
     def model_name(self):
         return 'deepseek-coder:6.7b'
 
+class Llama3Dot370BLLM(OllamaLLM):
+    @property
+    def model_name(self):
+        return 'llama3.3:70b'
+
 class DeepseekCoderV216BLLM(OllamaLLM):
     @property
     def model_name(self):
