@@ -25,7 +25,8 @@ LLMS = {
     'devstral-2512': llm.Devstral2512LLM(),
     'deepseek-coder:6.7b': llm.DeepseekCoder6Dot7BLLM(),
     'deepseek-coder-v2:16b': llm.DeepseekCoderV216BLLM(),
-    'deepseek-coder-v2:236b': llm.DeepseekCoderV2236BLLM()
+    'deepseek-coder-v2:236b': llm.DeepseekCoderV2236BLLM(),
+    'llama3.3:70b': llm.Llama3Dot370BLLM()
 }
 GITHUB = RemoteGitHub()
 clone_dir = 'repos/'
