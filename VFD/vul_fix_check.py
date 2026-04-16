@@ -582,9 +582,10 @@ def all_process(repo_url):
             functions = []
             patch_tokens = 0
             for i in range(len(commit['files'])):
-                patch_new.append(commit['files'][i]['patch'])
-                patch_token = 0.3 * len(commit['files'][i]['patch'])
-                patch_tokens =  patch_tokens + patch_token
+                if 'patch' in commit['files'][i]:
+                    patch_new.append(commit['files'][i]['patch'])
+                    patch_token = 0.3 * len(commit['files'][i]['patch'])
+                    patch_tokens =  patch_tokens + patch_token
             func_tokens = 0
             for i in range(len(patch_func)):
                 for j in range(len(patch_func[i]['funcs'])):
@@ -612,9 +613,10 @@ def all_process(repo_url):
                 context = {}
                 patch_tokens = 0
                 for i in range(len(commit['files'])):
-                    patch_new.append(commit['files'][i]['patch'])
-                    patch_token = 0.3 * len(commit['files'][i]['patch'])
-                    patch_tokens =  patch_tokens + patch_token
+                    if 'patch' in commit['files'][i]:
+                        patch_new.append(commit['files'][i]['patch'])
+                        patch_token = 0.3 * len(commit['files'][i]['patch'])
+                        patch_tokens =  patch_tokens + patch_token
                 for i in range(len(function_name)):
                     name = function_name[i]
                     if name != 'NULL':
