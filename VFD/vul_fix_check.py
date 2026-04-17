@@ -474,7 +474,7 @@ def patch_context(f_file, f_line, function, repo, repository_owner, before=3, af
     context = []
 
     for file_path, line_number in zip(files, lines):
-        full_path = file_path
+        full_path = file_path if file_path.startswith(os.path.join('repos', repository_owner, repo)) else os.path.join('repos', repository_owner, repo, file_path)
         func_code, func_name = get_func(full_path, line_number)
         if func_code != "NULL":
             code_lines = func_code.split("\n")
