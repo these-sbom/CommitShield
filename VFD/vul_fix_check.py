@@ -766,7 +766,13 @@ with open(result_path, 'a') as outputfile:
         result = {}
         url = url_list[i]
         result['url'] = url
-        last_result = all_process(url)
+        try:
+            last_result = all_process(url)
+        except Exception as e:
+            last_result = {
+                'answer': None,
+                'analyze': repr(e)
+            }
         result['result'] = last_result
         with open(temporary_path, 'a') as f:
              json.dump(result, f, indent=4)
